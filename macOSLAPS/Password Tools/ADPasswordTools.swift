@@ -4,7 +4,7 @@
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///  
-///  Last Update on March 17, 2021
+///  Last Update on March 18, 2022
 
 import Foundation
 import OpenDirectory
@@ -81,7 +81,18 @@ public class ADTools: NSObject {
     class func password_change(computer_record: Array<ODRecord>) {
         let security_enabled_user = Determine_secureToken()
         // Generate random password
-        let password = PasswordGen(length: Constants.password_length)
+        var password = PasswordGen(length: Constants.password_length)
+        var password_meets_requirements = ValidatePassword(generated_password: password)
+        var password_retry_count = 0
+        while password_meets_requirements == false && password_retry_count < 10 {
+            password = PasswordGen(length: Constants.password_length)
+            password_meets_requirements = ValidatePassword(generated_password: password)
+            password_retry_count = password_retry_count + 1
+        }
+        if password_meets_requirements == false {
+            laps_log.print("We were unable to generate a password with the requirements specified. Please run macOSLAPS again or change your password requirements", .error)
+            exit(1)
+        }
         // Set out next expiration date in a variable x days from what we specified
         let new_ad_exp_date = TimeConversion.windows()
         // Format Expiration Date
@@ -101,9 +112,9 @@ public class ADTools: NSObject {
         // Have we determineed that the local admin is a FileVault User or that the local admin user has a secureToken?
         if security_enabled_user == true {
             // If the attribute is nil then use our first password from config profile to change the password
-            if old_password == nil {
+            if old_password == nil || Constants.use_firstpass == true {
                 do {
-                    laps_log.print("Performing first password change using FirstPass attribute from configuration.", .info)
+                    laps_log.print("Performing first password change using FirstPass key from configuration profile or string command line argument specified.", .info)
                     try local_admin_record.changePassword(Constants.first_password, toPassword: password)
                 } catch {
                     laps_log.print("Unable to perform the first password change for secureToken admin account \(Constants.local_admin).")

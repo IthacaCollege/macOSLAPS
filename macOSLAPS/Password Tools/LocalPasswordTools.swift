@@ -4,7 +4,7 @@
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///
-///  Last Update on March 17, 2021
+///  Last Update on March 18, 2022
 
 import Foundation
 import OpenDirectory
@@ -26,11 +26,10 @@ class LocalTools: NSObject {
         // Convert the date we received to an acceptable format
         if creation_date == nil {
             return(Calendar.current.date(byAdding: .day, value: -7, to: Date()))
-            
         } else {
             guard let formatted_date = Constants.dateFormatter.date(from: creation_date!) else {
                 // Print message we were unable to convert the date
-                laps_log.print("Unable to unwrap the creation date form our keychain entry. Exiting...", .error)
+                laps_log.print("Unable to unwrap the creation date from our keychain entry. Exiting...", .error)
                 exit(1)
             }
             let exp_date = Calendar.current.date(byAdding: .day, value: Constants.days_till_expiration, to: formatted_date)!
@@ -41,7 +40,18 @@ class LocalTools: NSObject {
         // Get Configuration Settings
         let security_enabled_user = Determine_secureToken()
         // Generate random password
-        let password = PasswordGen(length: Constants.password_length)
+        var password = PasswordGen(length: Constants.password_length)
+        var password_meets_requirements = ValidatePassword(generated_password: password)
+        var password_retry_count = 0
+        while password_meets_requirements == false && password_retry_count < 10 {
+            password = PasswordGen(length: Constants.password_length)
+            password_meets_requirements = ValidatePassword(generated_password: password)
+            password_retry_count = password_retry_count + 1
+        }
+        if password_meets_requirements == false {
+            laps_log.print("We were unable to generate a password with the requirements specified. Please run macOSLAPS again or change your password requirements", .error)
+            exit(1)
+        }
         // Pull Local Administrator Record
         guard let local_node = try? ODNode.init(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)) else {
             laps_log.print("Unable to connect to local node.", .error)
@@ -56,10 +66,10 @@ class LocalTools: NSObject {
         // Password Changing Function
         if security_enabled_user == true {
             // If the attribute is nil then use our first password from config profile to change the password
-            if old_password == nil {
-                let first_pass = GetPreference(preference_key: "FirstPass") as! String
+            if old_password == nil || Constants.use_firstpass == true {
                 do {
-                    try local_admin_record.changePassword(first_pass, toPassword: password)
+                    laps_log.print("Performing first password change using FirstPass key from configuration profile or string command line argument specified.", .info)
+                    try local_admin_record.changePassword(Constants.first_password, toPassword: password)
                 } catch {
                     laps_log.print("Unable to change password for local administrator \(Constants.local_admin) using FirstPassword Key.", .error)
                     exit(1)
